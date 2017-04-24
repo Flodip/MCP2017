@@ -25,16 +25,6 @@ function method max(a:int, b:int) : int
     else a
 }
 
-method MergeRectangles(a:array<Rectangle>,i:int, j:int, r:Rectangle)  returns (b:array<Rectangle>)
-{
-    b := new Rectangle[a.Length-1];
-
-    forall(k | 0 <= k < i) {b[k] := a[k];}
-    forall(k | i < k < j) {b[k-1] := a[k];}
-    forall(k | j < k < a.Length) {b[k-2] := a[k];}
-    b[a.Length-2] := r;
-}
-
 // [/METHODS]
 
 // [PREDICATS]
@@ -57,14 +47,10 @@ predicate pDoesNotOverlap(a: Rectangle, b: Rectangle)
     || ((a.y1 <= b.y1 && a.y2 <= b.y1) || (a.y1 <= b.y2 && a.y2 >= b.y2))
 }
 
-predicate pNoOverlap(ListeRectangles: array<Rectangle>)
-{
-    forall i,j | 0 <= i < j < ListeRectangles.Length:: pDoesNotOverlap(ListeRectangles[i],ListeRectangles[j])
-}
-
 //modified
 predicate pCouvertureDescendante(C0: Couverture, C: Couverture)
 {
+    //Prochaine partie du projet
     true
 }
 
@@ -73,29 +59,59 @@ predicate pCouvertureDescendante(C0: Couverture, C: Couverture)
 class Couverture {
     
     var ListeRectangles: array<Rectangle>;
+    //Ajout d'une variable dans la classe couverture pour retenir le nombre de rectangles
+    //dans la liste, la taille du tableau pouvant être supérieure au nombre de rectangles
+    var nbRectangles: int;
+    //abstraction de ListRectangles
+    ghost var Rectangles: set<Rectangle>;
 
-    predicate ok()
+    predicate valid()
         reads this, ListeRectangles
-    { 
-        ListeRectangles != null && forall i | 0 <= i < ListeRectangles.Length :: okR(ListeRectangles[i])
-        && pNoOverlap(ListeRectangles)
+    {
+        //ok
+        ListeRectangles != null
+        && 0 <= nbRectangles <= ListeRectangles.Length
+        && forall i | 0 <= i < nbRectangles :: okR(ListeRectangles[i])
+        && pNoOverlap(ListeRectangles) 
+        //abs
+        && |Rectangles| == nbRectangles
+        && forall rect | rect in Rectangles
+            :: exists j | 0 <= j < nbRectangles :: rect == ListeRectangles[j]
     }
 
     constructor (qs: array<Rectangle>)
         requires pNoOverlap(qs)
         requires qs != null
-        modifies this
-        ensures ok()
+        requires forall i | 0 <= i < qs.Length :: okR(qs[i])
+        modifies this, ListeRectangles
+        ensures valid()
     {
         ListeRectangles := qs;
+        nbRectangles := qs.Length;
+        Rectangles := {};
+        forall i | 0 <= i < nbRectangles {Rectangles := Rectangles + {ListeRectangles[i]};}
     }
    
-    // [METHODS]
+    // [METHODS ]
 
     predicate method canMerge(a:Rectangle, b:Rectangle)
     {
         (a.y1 == b.y1 && a.y2 == b.y2 && (a.x1 == b.x2 || a.x2 == b.x1)) 
         || (a.x1 == b.x1 && a.x2 == b.x2 && (a.y1 == b.y2 || a.y2 == b.y1))
+    }
+
+    method MergeRectangles(a:array<Rectangle>,i:int, j:int, r:Rectangle)
+        modifies a;
+    {
+        // abs, on retire au set le rectangle i et rectangle j et on ajoute leur merge
+        Rectangles := Rectangles - {a[i],a[j]} + {r};
+        // /abs
+
+        forall(k | i < k < j) {a[k] := a[k+1];}
+        forall(k | j < k < nbRectangles) {a[k-1] := a[k];}
+
+        nbRectangles := nbRectangles - 1;
+        a[nbRectangles-1] := r;
     }
 
     method merge(a:Rectangle, b:Rectangle) returns (c:Rectangle)
@@ -106,33 +122,43 @@ class Couverture {
         c := R(min(a.x1,b.x1), min(a.y1,b.y1), max(a.x2,b.x2), max(a.y2,b.y2));
     }
 
-    method improve()
-    	requires ok()
-    	ensures ok() && pCouvertureDescendante(old(this), this)
+    method improve() returns (b:bool)
+    	requires valid()
+    	ensures valid() && pCouvertureDescendante(old(this), this)
         modifies this
     {
-        forall(i,j | 0 <= i < j < ListeRectangles.Length) {
-            if(canMerge(ListeRectangles[i],ListeRectangles[j])){
-                var r := merge(ListeRectangles[i],ListeRectangles[j]);
-                ListeRectangles := MergeRectangles(ListeRectangles,i,j,r);
+        var i := 0;
+        var j := 0;
+        b := false;
+
+        while  i<nbRectangles {
+            while  j<nbRectangles {
+                if canMerge(ListeRectangles[i],ListeRectangles[j]) {
+                    var r := merge(ListeRectangles[i],ListeRectangles[j]);
+                    MergeRectangles(ListeRectangles,i,j,r);
+                    b := true;
+                }
+                j := j+1;
             }
+            i := i+1;
         }
     }
     
     method optimize() 
-        requires ok()
-        ensures ok()
+        requires valid()
+        ensures valid()
     {
-        /* ... */
+        var canStillImprove := true;
+        while canStillImprove { canStillImprove := improve();}
     }
 
     method dump() 
-        requires ok()
+        requires valid()
     {
         var i := 0;
         var first := true;
         print "[ ";
-        while i < ListeRectangles.Length
+        while i < nbRectangles
         {
             if !first { print ", "; }
             print ListeRectangles[i];
@@ -143,6 +169,13 @@ class Couverture {
     }
 
     // [/METHODS]
+
+    // [PREDICATES]
+    predicate pNoOverlap(ListeRectangles: array<Rectangle>)
+    {
+        forall i,j | 0 <= i < j < nbRectangles :: pDoesNotOverlap(ListeRectangles[i],ListeRectangles[j])
+    }
+    // [/PREDICATES]
 }
 
 method Main() 

@@ -1,18 +1,21 @@
+
+// Type de donnée Rectangle
+// p1(x1, y1) et p2(x2, y2) les coordonnées des coins supérieur gauche et inférieur droit
 datatype Rectangle = R(x1: int, y1: int, x2: int, y2: int) 
 
+// Invariant de représentation de Rectangle
 predicate method okR(r: Rectangle)
 {
     r.x1 < r.x2 && r.y1 < r.y2 && 0 <= r.x1 && 0 <= r.x2 /*< N*/ && 0 <= r.y1 && 0 <= r.y2 /*< M*/
 }
 
+// Fonction d'abstraction de rectangle
+// Aire du rectangle
 function method absR(r: Rectangle): int
 {
-	// Je savais pas quoi mettre ici du coup j ai mis l aire
-	// pour pouvoir comparer 2 rectangles
-    (r.x2 - r.x1) * (r.y2 - r.y1)
+    (r.y2-r.y1)*(r.x2-r.x1)
 }
 
-// [METHODS]
 function method min(a:int, b:int) : int
 {
     if a>b then b
@@ -25,74 +28,54 @@ function method max(a:int, b:int) : int
     else a
 }
 
-// [/METHODS]
-
-// [PREDICATS]
-
-//Use predicate method canMerge instead
-/*predicate pCanMerge(a: Rectangle, b: Rectangle)
-{	
-	// erreur typo dans le rapport 1
-	(a.y1 == b.y1 && a.y2 == b.y2 && (a.x1 == b.x2 || a.x2 == b.x1)) || (a.x1 == b.x1 && a.x2 == b.x2 && (a.y1 == b.y2 || a.y2 == b.y1))
-}*/
-
 predicate pInRectangle(r: Rectangle, x: int, y: int)
 {
-	r.x1 <= x <= r.x2 && r.y1 <= y <= r.y2
+    r.x1 <= x <= r.x2 && r.y1 <= y <= r.y2
 }
 
 predicate pDoesNotOverlap(a: Rectangle, b: Rectangle)
 {
-	((a.x1 <= b.x1 && a.x2 <= b.x1) || (a.x1 >= b.x2 && a.x2 >= b.x2)) 
+    ((a.x1 <= b.x1 && a.x2 <= b.x1) || (a.x1 >= b.x2 && a.x2 >= b.x2)) 
     || ((a.y1 <= b.y1 && a.y2 <= b.y1) || (a.y1 <= b.y2 && a.y2 >= b.y2))
 }
 
-//modified
 predicate pCouvertureDescendante(C0: Couverture, C: Couverture)
 {
     //Prochaine partie du projet
     true
 }
 
-// [/PREDICATS]
-
 class Couverture {
     
-    var ListeRectangles: array<Rectangle>;
-    //Ajout d'une variable dans la classe couverture pour retenir le nombre de rectangles
-    //dans la liste, la taille du tableau pouvant être supérieure au nombre de rectangles
-    var nbRectangles: int;
-    //abstraction de ListRectangles
-    ghost var Rectangles: set<Rectangle>;
+    var ListeRectangles: array<Rectangle>; // liste des rectangles qui composent la couverture
+    ghost var Rectangles: set<Rectangle>; // abstraction de l'ensemble des rectangles
+    var nbRectangles: int; // nombre de rectangles de la couverture
 
+    // Invariant de représentation et fonction d'abstraction de Couverture
     predicate valid()
         reads this, ListeRectangles
-    {
-        //ok
-        ListeRectangles != null
-        && 0 <= nbRectangles <= ListeRectangles.Length
-        && forall i | 0 <= i < nbRectangles :: okR(ListeRectangles[i])
-        && pNoOverlap(ListeRectangles) 
-        //abs
-        && |Rectangles| == nbRectangles
-        && forall rect | rect in Rectangles
-            :: exists j | 0 <= j < nbRectangles :: rect == ListeRectangles[j]
+    { 
+        // ok
+        ListeRectangles != null &&
+        0 <= nbRectangles <= ListeRectangles.Length
+        
+        // abs
+        // pas encore utilise
     }
 
+    // Constructeur de la classe
+    // Initialise la couverture avec les rectangles du tableau qs
     constructor (qs: array<Rectangle>)
-        requires pNoOverlap(qs)
         requires qs != null
-        requires forall i | 0 <= i < qs.Length :: okR(qs[i])
-        modifies this, ListeRectangles
+        modifies this
         ensures valid()
     {
         ListeRectangles := qs;
         nbRectangles := qs.Length;
+
+        // abstraction Rectangles pas utilise dans cette partie du projet
         Rectangles := {};
-        forall i | 0 <= i < nbRectangles {Rectangles := Rectangles + {ListeRectangles[i]};}
     }
-   
-    // [METHODS ]
 
     predicate method canMerge(a:Rectangle, b:Rectangle)
     {
@@ -100,42 +83,60 @@ class Couverture {
         || (a.x1 == b.x1 && a.x2 == b.x2 && (a.y1 == b.y2 || a.y2 == b.y1))
     }
 
-    method MergeRectangles(a:array<Rectangle>,i:int, j:int, r:Rectangle)
-        modifies a;
+    // Ajoute le rectangle résultant de la fusion des rectangles aux positions i et j
+    // de ListeRectangles et supprime ceux-ci
+    method MergeRectangles(i:int, j:int, r:Rectangle) 
+        requires valid()
+        requires 0 <= i < j < nbRectangles
+        requires nbRectangles > 1
+        modifies ListeRectangles
     {
-        // abs, on retire au set le rectangle i et rectangle j et on ajoute leur merge
-        Rectangles := Rectangles - {a[i],a[j]} + {r};
-        // /abs
+        ListeRectangles[i] := r;
 
-        forall(k | i < k < j) {a[k] := a[k+1];}
-        forall(k | j < k < nbRectangles) {a[k-1] := a[k];}
-
-        nbRectangles := nbRectangles - 1;
-        a[nbRectangles-1] := r;
+        var k := j;
+        while k < nbRectangles-1
+            invariant nbRectangles > 1
+            invariant valid()
+            invariant 0 <= j <= k < nbRectangles
+            decreases nbRectangles-k
+        {
+            ListeRectangles[k] := ListeRectangles[k+1];
+            k := k+1;
+        }
     }
 
+    // Retourne le rectangle résultant de la fusion des rectangles a et b
     method merge(a:Rectangle, b:Rectangle) returns (c:Rectangle)
         requires canMerge(a,b)
-        ensures c.x1 == min(a.x1,b.x1) && c.y1 == min(a.y1,b.y1)
-                && c.x2 == max(a.x2,b.x2) && c.y2 == max(a.y2,b.y2)
     {
         c := R(min(a.x1,b.x1), min(a.y1,b.y1), max(a.x2,b.x2), max(a.y2,b.y2));
     }
 
+    // Essaye d'améliorer la couverture
+    // Retourne true <==> la couverture est améliorée
     method improve() returns (b:bool)
-    	requires valid()
-    	ensures valid() && pCouvertureDescendante(old(this), this)
-        modifies this
+        requires valid()
+        ensures valid()
+        modifies this, ListeRectangles
     {
         var i := 0;
-        var j := 0;
         b := false;
 
-        while  i<nbRectangles {
-            while  j<nbRectangles {
+        while i < nbRectangles
+            invariant valid()
+            invariant nbRectangles <= old(nbRectangles)
+            decreases old(nbRectangles)-i
+        {
+            var j := i+1;
+            while j < nbRectangles
+                invariant valid()
+                invariant nbRectangles <= old(nbRectangles)
+                decreases old(nbRectangles)-j
+            {
                 if canMerge(ListeRectangles[i],ListeRectangles[j]) {
                     var r := merge(ListeRectangles[i],ListeRectangles[j]);
-                    MergeRectangles(ListeRectangles,i,j,r);
+                    MergeRectangles(i,j,r);
+                    nbRectangles := nbRectangles-1;
                     b := true;
                 }
                 j := j+1;
@@ -143,15 +144,21 @@ class Couverture {
             i := i+1;
         }
     }
-    
+
+
+    // Calcule une couverture localement optimale
     method optimize() 
         requires valid()
         ensures valid()
     {
         var canStillImprove := true;
-        while canStillImprove { canStillImprove := improve();}
+        while canStillImprove
+        { 
+            canStillImprove := improve();
+        }
     }
 
+    // Imprime la liste de rectangles
     method dump() 
         requires valid()
     {
@@ -167,24 +174,47 @@ class Couverture {
         }
         print " ]\n";
     }
-
-    // [/METHODS]
-
-    // [PREDICATES]
-    predicate pNoOverlap(ListeRectangles: array<Rectangle>)
-    {
-        forall i,j | 0 <= i < j < nbRectangles :: pDoesNotOverlap(ListeRectangles[i],ListeRectangles[j])
-    }
-    // [/PREDICATES]
 }
 
 method Main() 
 {
-    // Vous devez écrire ici trois tests de votre méthode optimize
-    var g := new Rectangle[3];
-    g[1], g[2] := R(1,1,1,1), R(2,2,2,2);
+    // Test 1
+
+    print "Test 1 : pas de merge\n";
+
+    var g := new Rectangle[2];
+    g[0], g[1] := R(1,1,2,2), R(5,5,7,7);
 
     var m := new Couverture(g);
+
+    m.dump();
+    m.optimize();
+    m.dump();
+
+    // Test 2
+
+    print "Test 2 : merge\n";
+
+    g := new Rectangle[2];
+    g[0], g[1] := R(1,1,2,2), R(2,1,3,2);
+
+    m := new Couverture(g);
+
+    m.dump();
+    m.optimize();
+    m.dump();
+
+    // Test 3
+
+    print "Test 3 : plusieurs merge\n";
+
+    g := new Rectangle[4];
+    g[0], g[1], g[2], g[3] := R(0,0,2,2), R(2,0,4,2), R(2,2,4,4), R(6,6,8,8);
+
+    m := new Couverture(g);
+
+    m.dump();
+    m.optimize();
     m.dump();
 }
 

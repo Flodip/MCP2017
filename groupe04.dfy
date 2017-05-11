@@ -1,4 +1,4 @@
-
+datatype Point = P(x: int, y: int)
 // Type de donnée Rectangle
 // p1(x1, y1) et p2(x2, y2) les coordonnées des coins supérieur gauche et inférieur droit
 datatype Rectangle = R(x1: int, y1: int, x2: int, y2: int) 
@@ -6,14 +6,13 @@ datatype Rectangle = R(x1: int, y1: int, x2: int, y2: int)
 // Invariant de représentation de Rectangle
 predicate method okR(r: Rectangle)
 {
-    r.x1 < r.x2 && r.y1 < r.y2 && 0 <= r.x1 && 0 <= r.x2 /*< N*/ && 0 <= r.y1 && 0 <= r.y2 /*< M*/
+    r.x1 < r.x2 && r.y1 < r.y2 && 0 <= r.x1 && 0 <= r.x2 && 0 <= r.y1 && 0 <= r.y2
 }
 
 // Fonction d'abstraction de rectangle
-// Aire du rectangle
-function method absR(r: Rectangle): int
-{
-    (r.y2-r.y1)*(r.x2-r.x1)
+function method abs(q: Rectangle): set<Point>
+{ 
+    set x, y | q.x1 <= x < q.x2 && q.y1 <= y < q.y2 :: Point.P(x, y) 
 }
 
 function method min(a:int, b:int) : int
@@ -44,33 +43,20 @@ predicate pCouvertureDescendante(C0: Couverture, C: Couverture)
     requires C0.valid() && C.valid()
     reads C0, C0.ListeRectangles, C, C.ListeRectangles
 {
-    C0.nbRectangles >= C.nbRectangles
-    && forall i | 0 <= i < C0.nbRectangles ::
-        forall x, y | C0.ListeRectangles[i].x1 <= x <= C0.ListeRectangles[i].x2
-                    && C0.ListeRectangles[i].y1 <= y <= C0.ListeRectangles[i].y2 ::
-                        C.contains(x, y)
-    && forall i | 0 <= i < C.nbRectangles ::
-        forall x, y | C.ListeRectangles[i].x1 <= x <= C.ListeRectangles[i].x2
-                    && C.ListeRectangles[i].y1 <= y <= C.ListeRectangles[i].y2 ::
-                        C0.contains(x, y)
+    forall x, y :: C.contains(x,y) <==> C0.contains(x,y)    
 }
 
 class Couverture {
     
     var ListeRectangles: array<Rectangle>; // liste des rectangles qui composent la couverture
-    //ghost var Rectangles: set<Rectangle>; // abstraction de l'ensemble des rectangles
     var nbRectangles: int; // nombre de rectangles de la couverture
 
-    // Invariant de représentation et fonction d'abstraction de Couverture
+    // Invariant de représentation
     predicate valid()
         reads this, ListeRectangles
     { 
-        // ok
         ListeRectangles != null &&
         0 <= nbRectangles <= ListeRectangles.Length
-        
-        // abs
-        // pas encore utilise
     }
 
     // Constructeur de la classe
@@ -84,9 +70,6 @@ class Couverture {
     {
         ListeRectangles := qs;
         nbRectangles := qs.Length;
-
-        // abstraction Rectangles pas utilise dans cette partie du projet
-        //Rectangles := {};
     }
 
     predicate method contains(x:int, y:int)
@@ -102,63 +85,24 @@ class Couverture {
         || (a.x1 == b.x1 && a.x2 == b.x2 && (a.y1 == b.y2 || a.y2 == b.y1))
     }
 
-    // Ajoute le rectangle résultant de la fusion des rectangles aux positions i et j
-    // de ListeRectangles et supprime ceux-ci
-    method MergeRectangles(i:int, j:int, r:Rectangle) returns (lr: array<Rectangle>)
+    method MergeRectangles(i:int, j:int, r:Rectangle)
         requires valid()
         requires 0 <= i < j < nbRectangles
-        requires nbRectangles > 1
-        ensures lr != null && 0 <= lr.Length && lr.Length == nbRectangles-1 && fresh(lr)
-        ensures lr[i] == r // le nouveau rectanle (fusion des rectangles i et j) est mis a l'indice i
-        // tous les rectangles de la couverture sont copies dans la nouvelle liste sauf les indices i et j
-        ensures forall l | 0 <= l < i :: lr[l] == ListeRectangles[l]
-        ensures forall l | i < l < j :: lr[l] == ListeRectangles[l]
-        ensures forall l | j < l < nbRectangles-1 :: lr[l] == ListeRectangles[l+1]
-{
-        var k := 0;
-        lr := new Rectangle[nbRectangles-1];
-
-        while k < i
-            invariant 0 <= k <= i
-            invariant forall l | 0 <= l < k :: lr[l] == ListeRectangles[l]
-    
-            decreases i-k
-        {
-            lr[k] := ListeRectangles[k];
-            k := k+1;
+        modifies ListeRectangles, this
+        ensures ListeRectangles == old(ListeRectangles)
+        ensures 0 <= nbRectangles == old(nbRectangles) - 1 < old(nbRectangles)
+        ensures valid()
+    {
+        ListeRectangles[i] := r;
+        if (j < nbRectangles - 1) {
+            ListeRectangles[j] := ListeRectangles[nbRectangles-1];
         }
-
-        lr[k] := r;
-        assert lr[i] == r;
-        k := k+1;
-
-        while k < j
-            invariant i < k <= j
-            invariant lr[i] == r
-            invariant forall l | 0 <= l < i :: lr[l] == ListeRectangles[l]
-            invariant forall l | i < l < k :: lr[l] == ListeRectangles[l]
-            decreases j-k
-        {
-            lr[k] := ListeRectangles[k];
-            k := k+1;
-        }
-
-        while k < nbRectangles-1
-            invariant 0 <= j <= k < nbRectangles
-            invariant lr[i] == r
-            invariant forall l | 0 <= l < i :: lr[l] == ListeRectangles[l]
-            invariant forall l | i < l < j :: lr[l] == ListeRectangles[l]
-            invariant forall l | j < l < k :: lr[l] == ListeRectangles[l+1]
-            decreases nbRectangles-k
-        {
-            lr[k] := ListeRectangles[k+1];
-            k := k+1;
-        }
+        nbRectangles := nbRectangles - 1;
     }
-
     // Retourne le rectangle résultant de la fusion des rectangles a et b
     method merge(a:Rectangle, b:Rectangle) returns (c:Rectangle)
         requires canMerge(a,b)
+        ensures abs(a) + abs(b) == abs(c)
     {
         c := R(min(a.x1,b.x1), min(a.y1,b.y1), max(a.x2,b.x2), max(a.y2,b.y2));
     }
@@ -167,10 +111,11 @@ class Couverture {
     // Retourne true <==> la couverture est améliorée
     method improve() returns (b:bool)
         requires valid()
+        modifies this, ListeRectangles
         ensures valid()
         ensures pCouvertureDescendante(this, old(this))
         ensures b <==> nbRectangles < old(nbRectangles)
-        modifies this
+        ensures ListeRectangles == old(ListeRectangles)
     {
         var i := 0;
         b := false;
@@ -179,6 +124,7 @@ class Couverture {
             invariant valid()
             invariant nbRectangles <= old(nbRectangles)
             invariant b <==> nbRectangles < old(nbRectangles)
+            invariant ListeRectangles == old(ListeRectangles)
             decreases old(nbRectangles)-i
         {
             var j := i+1;
@@ -186,15 +132,15 @@ class Couverture {
                 invariant valid()
                 invariant nbRectangles <= old(nbRectangles)
                 invariant b <==> nbRectangles < old(nbRectangles)
+                invariant ListeRectangles == old(ListeRectangles)
                 decreases old(nbRectangles)-j
             {
                 if canMerge(ListeRectangles[i],ListeRectangles[j]) {
                     var r := merge(ListeRectangles[i],ListeRectangles[j]);
-                    ListeRectangles := MergeRectangles(i,j,r);
-                    nbRectangles := nbRectangles-1;
+                    MergeRectangles(i,j,r);
                     b := true;
                 }
-                assert b <==> nbRectangles < old(nbRectangles);
+                
                 j := j+1;
             }
             i := i+1;
@@ -205,7 +151,7 @@ class Couverture {
     // Calcule une couverture localement optimale
     method optimize() 
         requires valid()
-        modifies this
+        modifies this, ListeRectangles
         ensures valid()
         ensures pCouvertureDescendante(old(this), this)
     {
@@ -214,6 +160,7 @@ class Couverture {
         var i := 0;
         while canStillImprove && i < size
             invariant valid()
+            invariant ListeRectangles == old(ListeRectangles)
             decreases size - i
         { 
             canStillImprove := improve();

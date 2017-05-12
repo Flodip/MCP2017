@@ -1,7 +1,16 @@
+/*
+Methodes de conception de programmes - Mai 2017
+Projet : Partie 3
+Beznik Thomas
+Coppe Vianney
+Di Prinzio Florentin
+*/
+
 datatype Point = P(x: int, y: int)
+
 // Type de donnée Rectangle
 // p1(x1, y1) et p2(x2, y2) les coordonnées des coins supérieur gauche et inférieur droit
-datatype Rectangle = R(x1: int, y1: int, x2: int, y2: int) 
+datatype Rectangle = R(x1: int, y1: int, x2: int, y2: int)
 
 // Invariant de représentation de Rectangle
 predicate method okR(r: Rectangle)
@@ -11,8 +20,8 @@ predicate method okR(r: Rectangle)
 
 // Fonction d'abstraction de rectangle
 function method absR(q: Rectangle): set<Point>
-{ 
-    set x, y | q.x1 <= x < q.x2 && q.y1 <= y < q.y2 :: Point.P(x, y) 
+{
+    set x, y | q.x1 <= x < q.x2 && q.y1 <= y < q.y2 :: Point.P(x, y)
 }
 
 function method min(a:int, b:int) : int
@@ -27,19 +36,22 @@ function method max(a:int, b:int) : int
     else a
 }
 
+// true <==> le point (x, y) est contenu dans le rectangle r
 predicate method pInRectangle(r: Rectangle, x: int, y: int)
 {
     r.x1 <= x <= r.x2 && r.y1 <= y <= r.y2
 }
 
+// true <==> les deux rectangles ne sont pas superposes
 predicate pDoesNotOverlap(a: Rectangle, b: Rectangle)
 {
     (a.x2 <= b.x1)      // Rectange a à gauche de Rectangle b
     || (a.x1 >= b.x2)   // Rectangle a à droite de Rectangle b
-    || (a.y2 <= b.y1)    // Rectange a au dessus de Rectangle b
-    || (a.y1 >= b.y2)    // Rectangle a en dessous de Rectangle b
+    || (a.y2 <= b.y1)   // Rectange a au dessus de Rectangle b
+    || (a.y1 >= b.y2)   // Rectangle a en dessous de Rectangle b
 }
 
+// true <==> aucune paire de rectangles ne se superpose
 predicate pNoOverlap(rectangles: array<Rectangle>, size: int)
     requires rectangles != null
     requires 0 <= size <= rectangles.Length
@@ -49,28 +61,30 @@ predicate pNoOverlap(rectangles: array<Rectangle>, size: int)
     else forall i,j | 0 <= i < j < size :: pDoesNotOverlap(rectangles[i], rectangles[j])
 }
 
+// true <==> C0 et C recouvrent la meme surface
 predicate pCouvertureDescendante(C0: Couverture, C: Couverture)
     requires C0 != null && C != null
     requires C0.valid() && C.valid()
     reads C0, C0.ListeRectangles, C, C.ListeRectangles
 {
-    forall x, y :: C.contains(x,y) <==> C0.contains(x,y)    
+    forall x, y :: C.contains(x,y) <==> C0.contains(x,y)
 }
 
+// true <==> r3 resulte de la fusion de r1 et r2
 predicate pMerge(r1: Rectangle, r2: Rectangle, r3: Rectangle)
 {
     absR(r3) == absR(r1) + absR(r2)
 }
 
 class Couverture {
-    
-    var ListeRectangles: array<Rectangle>; // liste des rectangles qui composent la couverture
-    var nbRectangles: int; // nombre de rectangles de la couverture
+
+    var ListeRectangles: array<Rectangle>;  // liste des rectangles qui composent la couverture
+    var nbRectangles: int;                  // nombre de rectangles de la couverture
 
     // Invariant de représentation
     predicate valid()
         reads this, ListeRectangles
-    { 
+    {
         ListeRectangles != null &&
         0 <= nbRectangles <= ListeRectangles.Length
         // Dafny n'arrive pas à prouver pNoOverlap
@@ -91,6 +105,7 @@ class Couverture {
         nbRectangles := qs.Length;
     }
 
+    // true <==> un rectangle de la couverture contient le point (x, y)
     predicate method contains(x:int, y:int)
         requires valid()
         reads this, ListeRectangles
@@ -98,12 +113,15 @@ class Couverture {
         exists i | 0 <= i < nbRectangles :: pInRectangle(ListeRectangles[i], x, y)
     }
 
+    // true <==> a et b peuvent etre fusionnes
     predicate method canMerge(a:Rectangle, b:Rectangle)
     {
-        (a.y1 == b.y1 && a.y2 == b.y2 && (a.x1 == b.x2 || a.x2 == b.x1)) 
+        (a.y1 == b.y1 && a.y2 == b.y2 && (a.x1 == b.x2 || a.x2 == b.x1))
         || (a.x1 == b.x1 && a.x2 == b.x2 && (a.y1 == b.y2 || a.y2 == b.y1))
     }
 
+    // Met a jour ListeRectangles avec le rectangle r
+    // resultat de la fusion de ListeRectangles[i] et ListeRectangles[j]
     method MergeRectangles(i:int, j:int, r:Rectangle)
         requires valid()
         requires 0 <= i < j < nbRectangles
@@ -120,8 +138,9 @@ class Couverture {
         nbRectangles := nbRectangles - 1;
 
         // Dafny bloque sur l'assertion
-        //assert forall k | 0 <= k < nbRectangles && k != i :: pDoesNotOverlap(r, ListeRectangles[k]) ;
+        // assert forall k | 0 <= k < nbRectangles && k != i :: pDoesNotOverlap(r, ListeRectangles[k]) ;
     }
+
     // Retourne le rectangle résultant de la fusion des rectangles a et b
     method merge(a:Rectangle, b:Rectangle) returns (c:Rectangle)
         requires canMerge(a,b)
@@ -163,7 +182,7 @@ class Couverture {
                     MergeRectangles(i,j,r);
                     b := true;
                 }
-                
+
                 j := j+1;
             }
             i := i+1;
@@ -172,7 +191,7 @@ class Couverture {
 
 
     // Calcule une couverture localement optimale
-    method optimize() 
+    method optimize()
         requires valid()
         modifies this, ListeRectangles
         ensures valid()
@@ -185,14 +204,14 @@ class Couverture {
             invariant valid()
             invariant ListeRectangles == old(ListeRectangles)
             decreases size - i
-        { 
+        {
             canStillImprove := improve();
             i := i+1;
         }
     }
 
     // Imprime la liste de rectangles
-    method dump() 
+    method dump()
         requires valid()
     {
         var i := 0;
@@ -209,7 +228,7 @@ class Couverture {
     }
 }
 
-method Main() 
+method Main()
 {
     //Test 1
 
@@ -220,8 +239,10 @@ method Main()
 
     var m := new Couverture(g);
 
+    print "Couverture initiale  : ";
     m.dump();
     m.optimize();
+    print "Couverture optimisee : ";
     m.dump();
 
     //Test 2
@@ -233,8 +254,10 @@ method Main()
 
     m := new Couverture(g);
 
+    print "Couverture initiale  : ";
     m.dump();
     m.optimize();
+    print "Couverture optimisee : ";
     m.dump();
 
     //Test 3
@@ -246,8 +269,9 @@ method Main()
 
     m := new Couverture(g);
 
+    print "Couverture initiale  : ";
     m.dump();
     m.optimize();
+    print "Couverture optimisee : ";
     m.dump();
 }
-

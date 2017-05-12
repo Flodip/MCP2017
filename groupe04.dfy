@@ -10,7 +10,7 @@ predicate method okR(r: Rectangle)
 }
 
 // Fonction d'abstraction de rectangle
-function method abs(q: Rectangle): set<Point>
+function method absR(q: Rectangle): set<Point>
 { 
     set x, y | q.x1 <= x < q.x2 && q.y1 <= y < q.y2 :: Point.P(x, y) 
 }
@@ -34,8 +34,19 @@ predicate method pInRectangle(r: Rectangle, x: int, y: int)
 
 predicate pDoesNotOverlap(a: Rectangle, b: Rectangle)
 {
-    ((a.x1 <= b.x1 && a.x2 <= b.x1) || (a.x1 >= b.x2 && a.x2 >= b.x2)) 
-    || ((a.y1 <= b.y1 && a.y2 <= b.y1) || (a.y1 <= b.y2 && a.y2 >= b.y2))
+    (a.x2 <= b.x1)      // Rectange a à gauche de Rectangle b
+    || (a.x1 >= b.x2)   // Rectangle a à droite de Rectangle b
+    || (a.y2 <= b.y1)    // Rectange a au dessus de Rectangle b
+    || (a.y1 >= b.y2)    // Rectangle a en dessous de Rectangle b
+}
+
+predicate pNoOverlap(rectangles: array<Rectangle>, size: int)
+    requires rectangles != null
+    requires 0 <= size <= rectangles.Length
+    reads rectangles
+{
+    if size <= 1 then true
+    else forall i,j | 0 <= i < j < size :: pDoesNotOverlap(rectangles[i], rectangles[j])
 }
 
 predicate pCouvertureDescendante(C0: Couverture, C: Couverture)
@@ -44,6 +55,11 @@ predicate pCouvertureDescendante(C0: Couverture, C: Couverture)
     reads C0, C0.ListeRectangles, C, C.ListeRectangles
 {
     forall x, y :: C.contains(x,y) <==> C0.contains(x,y)    
+}
+
+predicate pMerge(r1: Rectangle, r2: Rectangle, r3: Rectangle)
+{
+    absR(r3) == absR(r1) + absR(r2)
 }
 
 class Couverture {
@@ -57,12 +73,15 @@ class Couverture {
     { 
         ListeRectangles != null &&
         0 <= nbRectangles <= ListeRectangles.Length
+        // Dafny n'arrive pas à prouver pNoOverlap
+        //&& pNoOverlap(ListeRectangles, nbRectangles)
     }
 
     // Constructeur de la classe
     // Initialise la couverture avec les rectangles du tableau qs
     constructor (qs: array<Rectangle>)
         requires qs != null
+        requires pNoOverlap(qs, qs.Length)
         modifies this
         ensures valid()
         ensures ListeRectangles == qs
@@ -88,6 +107,7 @@ class Couverture {
     method MergeRectangles(i:int, j:int, r:Rectangle)
         requires valid()
         requires 0 <= i < j < nbRectangles
+        requires pMerge(ListeRectangles[i], ListeRectangles[j], r)
         modifies ListeRectangles, this
         ensures ListeRectangles == old(ListeRectangles)
         ensures 0 <= nbRectangles == old(nbRectangles) - 1 < old(nbRectangles)
@@ -98,11 +118,14 @@ class Couverture {
             ListeRectangles[j] := ListeRectangles[nbRectangles-1];
         }
         nbRectangles := nbRectangles - 1;
+
+        // Dafny bloque sur l'assertion
+        //assert forall k | 0 <= k < nbRectangles && k != i :: pDoesNotOverlap(r, ListeRectangles[k]) ;
     }
     // Retourne le rectangle résultant de la fusion des rectangles a et b
     method merge(a:Rectangle, b:Rectangle) returns (c:Rectangle)
         requires canMerge(a,b)
-        ensures abs(a) + abs(b) == abs(c)
+        ensures absR(a) + absR(b) == absR(c)
     {
         c := R(min(a.x1,b.x1), min(a.y1,b.y1), max(a.x2,b.x2), max(a.y2,b.y2));
     }
